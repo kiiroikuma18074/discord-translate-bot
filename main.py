@@ -1,5 +1,21 @@
 import os
 import discord
+from flask import Flask
+from threading import Thread
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "I'm alive!"  # 動作確認用メッセージ
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
 from discord.ext import commands
 
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")  # ← Render の環境変数を取得

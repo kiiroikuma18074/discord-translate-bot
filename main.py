@@ -60,13 +60,4 @@ async def on_message(message):
 
     # 絵文字とURLを保持しつつ翻訳
     text = message.content
-    emoji_pattern = r"(<:[a-zA-Z0-9_]+:[0-9]+>|[\U0001F300-\U0001F6FF\u2600-\u26FF\u2700-\u27BF])"
-    emojis = re.findall(emoji_pattern, text)
-    clean_text = re.sub(emoji_pattern, "", text)
-
-    if clean_text.strip():
-        for lang in settings["languages"]:
-            try:
-                translated = GoogleTranslator(source='auto', target=lang).translate(clean_text)
-                result = f"[{lang}] {translated} {' '.join(emojis)}"
-                awa
+    emoji_pa_

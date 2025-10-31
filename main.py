@@ -1,5 +1,6 @@
 import os
 import discord
+from discord.ext import commands 
 from discord import app_commands
 from deep_translator import GoogleTranslator
 from flask import Flask

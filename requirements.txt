@@ -1,3 +1,4 @@
-py-cord==2.5.0 --no-binary :all:
-deep-translator==1.11.4
+discord.py==2.3.2
+Flask
+deep-translator
 Flask

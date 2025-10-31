@@ -38,5 +38,21 @@ async def on_message(message):
         await message.channel.send(f"[{lang}] {translated}")
 
     await bot.process_commands(message)
-
+keep_alive()
 bot.run(TOKEN)
+from flask import Flask
+from threading import Thread
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "I'm alive!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+

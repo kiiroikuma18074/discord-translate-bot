@@ -6,7 +6,7 @@ from deep_translator import GoogleTranslator
 from flask import Flask
 from threading import Thread
 
-# Flaskサーバー (Renderで維持用)
+# --- Flask サーバー（Render維持用） ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -22,7 +22,7 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# Discord Bot設定
+# --- Discord Bot 設定 ---
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 
 intents = discord.Intents.default()

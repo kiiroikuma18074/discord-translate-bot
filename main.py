@@ -1,56 +1,93 @@
+# main.py (Renderで動かすDiscordボット + Flask keep-alive サンプル)
 import os
 import discord
-from discord.ext import commands, tasks
-from discord import app_commands
+from discord.ext import commands
 from deep_translator import GoogleTranslator
 from flask import Flask
-import threading
+from threading import Thread
 
-# Flaskサーバー（Renderのスリープ防止）
+# ===== Flask: ヘルスチェック用 =====
 app = Flask(__name__)
 
 @app.route('/')
 def home():
+    # この文字列をUptimeRobotのKeywordに登録する（正確一致）
     return "Bot is running!"
 
 def run_flask():
-    app.run(host="0.0.0.0", port=8080)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
 
-# Discord Bot 設定
+def keep_alive():
+    t = Thread(target=run_flask)
+    t.daemon = True
+    t.start()
+
+# ===== Discord Bot =====
+TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 起動メッセージ
+TARGET_LANGUAGES = ["ja", "en", "zh-CN", "ko", "es", "vi"]
+server_settings = {}
+
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
-    try:
-        synced = await bot.tree.sync()
-        print(f"✅ Slash commands synced ({len(synced)} commands)")
-    except Exception as e:
-        print(f"❌ Error syncing commands: {e}")
 
-# /translate コマンド
-@bot.tree.command(name="translate", description="テキストを翻訳します")
-@app_commands.describe(
-    text="翻訳したいテキストを入力してください",
-    target_lang="翻訳先の言語コード（例: en, ja, fr）"
-)
-async def translate(interaction: discord.Interaction, text: str, target_lang: str):
-    try:
-        translated = GoogleTranslator(source='auto', target=target_lang).translate(text)
-        await interaction.response.send_message(f"✅ 翻訳結果 ({target_lang}): {translated}")
-    except Exception as e:
-        await interaction.response.send_message(f"❌ 翻訳エラー: {e}")
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
 
-# Flaskサーバーを別スレッドで起動
-threading.Thread(target=run_flask).start()
+    guild_id = message.guild.id if message.guild else None
+    settings = server_settings.get(guild_id, {"auto": True, "languages": TARGET_LANGUAGES})
 
-# トークンでログイン
-token = os.getenv("DISCORD_BOT_TOKEN")
-if not token:
-    print("❌ Error: DISCORD_BOT_TOKEN が設定されていません！Renderの Environment に追加してください。")
-else:
-    bot.run(token)
+    if not settings["auto"]:
+        await bot.process_commands(message)
+        return
+
+    # 絵文字をそのままにしたい場合はメッセージ中の絵文字を変換しない工夫（下ではそのまま送る）
+    for lang in settings["languages"]:
+        try:
+            translated = GoogleTranslator(source='auto', target=lang).translate(message.content)
+        except Exception as e:
+            translated = f"[{lang}] 翻訳エラー"
+        await message.channel.send(f"[{lang}] {translated}")
+
+    await bot.process_commands(message)
+
+# example commands
+@bot.command()
+async def auto(ctx, mode: str = None):
+    guild_id = ctx.guild.id
+    settings = server_settings.get(guild_id, {"auto": True, "languages": TARGET_LANGUAGES})
+    if mode is None:
+        await ctx.send(f"現在の状態: {'ON' if settings['auto'] else 'OFF'}\n使い方: `!auto on` / `!auto off`")
+        return
+    if mode.lower() == "on":
+        settings["auto"] = True
+        await ctx.send("✅ 自動翻訳を ON にしました。")
+    elif mode.lower() == "off":
+        settings["auto"] = False
+        await ctx.send("🛑 自動翻訳を OFF にしました。")
+    else:
+        await ctx.send("使い方: `!auto on` または `!auto off`")
+    server_settings[guild_id] = settings
+
+@bot.command()
+async def lang(ctx, *langs):
+    guild_id = ctx.guild.id
+    if not langs:
+        await ctx.send("使い方: `!lang en ja ko` のように指定してください。")
+        return
+    server_settings[guild_id] = server_settings.get(guild_id, {"auto": True})
+    server_settings[guild_id]["languages"] = list(langs)
+    await ctx.send(f"翻訳対象言語を設定しました: {', '.join(langs)}")
+
+# ===== 起動 =====
+if __name__ == "__main__":
+    keep_alive()
+    bot.run(TOKEN)

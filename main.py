@@ -1,4 +1,4 @@
-# main.py (Renderで動かすDiscordボット + Flask keep-alive サンプル)
+# main.py
 import os
 import discord
 from discord.ext import commands
@@ -11,7 +11,6 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    # この文字列をUptimeRobotのKeywordに登録する（正確一致）
     return "Bot is running!"
 
 def run_flask():
@@ -33,10 +32,13 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 TARGET_LANGUAGES = ["ja", "en", "zh-CN", "ko", "es", "vi"]
 server_settings = {}
 
+# ✅ ここに正しい on_ready を定義！
 @bot.event
 async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
+    await bot.tree.sync()  # スラッシュコマンドを同期
+    print(f"✅ Slash commands synced as {bot.user}")
 
+# ===== メッセージ受信時の翻訳 =====
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -49,17 +51,16 @@ async def on_message(message):
         await bot.process_commands(message)
         return
 
-    # 絵文字をそのままにしたい場合はメッセージ中の絵文字を変換しない工夫（下ではそのまま送る）
     for lang in settings["languages"]:
         try:
             translated = GoogleTranslator(source='auto', target=lang).translate(message.content)
-        except Exception as e:
+        except Exception:
             translated = f"[{lang}] 翻訳エラー"
         await message.channel.send(f"[{lang}] {translated}")
 
     await bot.process_commands(message)
 
-# example commands
+# ===== 通常コマンド =====
 @bot.command()
 async def auto(ctx, mode: str = None):
     guild_id = ctx.guild.id
@@ -79,15 +80,3 @@ async def auto(ctx, mode: str = None):
 
 @bot.command()
 async def lang(ctx, *langs):
-    guild_id = ctx.guild.id
-    if not langs:
-        await ctx.send("使い方: `!lang en ja ko` のように指定してください。")
-        return
-    server_settings[guild_id] = server_settings.get(guild_id, {"auto": True})
-    server_settings[guild_id]["languages"] = list(langs)
-    await ctx.send(f"翻訳対象言語を設定しました: {', '.join(langs)}")
-
-# ===== 起動 =====
-if __name__ == "__main__":
-    keep_alive()
-    bot.run(TOKEN)

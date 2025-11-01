@@ -1,4 +1,3 @@
-# main.py
 import os
 import discord
 from discord.ext import commands
@@ -32,13 +31,11 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 TARGET_LANGUAGES = ["ja", "en", "zh-CN", "ko", "es", "vi"]
 server_settings = {}
 
-# ✅ ここに正しい on_ready を定義！
 @bot.event
 async def on_ready():
-    await bot.tree.sync()  # スラッシュコマンドを同期
+    await bot.tree.sync()
     print(f"✅ Slash commands synced as {bot.user}")
 
-# ===== メッセージ受信時の翻訳 =====
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -60,7 +57,6 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# ===== 通常コマンド =====
 @bot.command()
 async def auto(ctx, mode: str = None):
     guild_id = ctx.guild.id
@@ -80,3 +76,15 @@ async def auto(ctx, mode: str = None):
 
 @bot.command()
 async def lang(ctx, *langs):
+    guild_id = ctx.guild.id
+    if not langs:
+        await ctx.send("使い方: `!lang en ja ko` のように指定してください。")
+        return
+    server_settings[guild_id] = server_settings.get(guild_id, {"auto": True})
+    server_settings[guild_id]["languages"] = list(langs)
+    await ctx.send(f"翻訳対象言語を設定しました: {', '.join(langs)}")
+
+# ===== 起動 =====
+if __name__ == "__main__":
+    keep_alive()
+    bot.run(TOKEN)

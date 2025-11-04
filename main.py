@@ -7,7 +7,7 @@ from flask import Flask
 from threading import Thread
 
 # ==============================
-# Flaskサーバー（Render維持用）
+# Flask（Render維持用）
 # ==============================
 app = Flask(__name__)
 
@@ -26,29 +26,34 @@ def keep_alive():
 
 
 # ==============================
-# Discord Bot 設定
+# Discord Bot設定
 # ==============================
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
-
 if not TOKEN:
-    print("❌ 環境変数 DISCORD_BOT_TOKEN が見つかりません！Render の Environment 設定を確認してください。")
+    print("❌ 環境変数 DISCORD_BOT_TOKEN が見つかりません！")
 else:
-    print("✅ DISCORD_BOT_TOKEN を正常に読み込みました。")
+    print("✅ DISCORD_BOT_TOKEN 読み込み完了")
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.messages = True
+intents.guilds = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
 
 # ==============================
-# データ保存用辞書
+# 各種データ
 # ==============================
 auto_translate_guilds = {}
 user_languages = {}
 channel_whitelist = {}
 
-# --- 国旗絵文字マッピング ---
+# 翻訳メッセージの紐づけ用
+translated_message_map = {}  # {元メッセージID: [翻訳メッセージID1, 翻訳メッセージID2, ...]}
+
+# 国旗マッピング
 flags = {
     "en": "🇺🇸", "ja": "🇯🇵", "ko": "🇰🇷", "zh": "🇨🇳",
     "fr": "🇫🇷", "de": "🇩🇪", "es": "🇪🇸", "it": "🇮🇹",
@@ -57,7 +62,7 @@ flags = {
 
 
 # ==============================
-# /autoコマンド（自動翻訳ON/OFF）
+# /auto 自動翻訳ON/OFF
 # ==============================
 @tree.command(name="auto", description="自動翻訳をオン／オフします")
 @app_commands.describe(mode="on または off")
@@ -74,7 +79,7 @@ async def auto(interaction: discord.Interaction, mode: str):
 
 
 # ==============================
-# /langコマンド（翻訳対象言語の設定）
+# /lang 翻訳対象言語設定
 # ==============================
 @tree.command(name="lang", description="翻訳対象言語を設定します（例: en ja ko）")
 @app_commands.describe(languages="翻訳先の言語をスペース区切りで入力")
@@ -87,7 +92,7 @@ async def lang(interaction: discord.Interaction, languages: str):
 
 
 # ==============================
-# /channelコマンド（翻訳対象チャンネル設定）
+# /channel 翻訳を有効にするチャンネル選択
 # ==============================
 @tree.command(name="channel", description="翻訳を有効にするチャンネルを設定します")
 @app_commands.describe(channel="翻訳を有効にしたいチャンネル")
@@ -104,7 +109,7 @@ async def channel(interaction: discord.Interaction, channel: discord.TextChannel
 
 
 # ==============================
-# /statusコマンド（設定確認）
+# /status 現在設定確認
 # ==============================
 @tree.command(name="status", description="現在の翻訳設定を確認します")
 async def status(interaction: discord.Interaction):
@@ -123,7 +128,7 @@ async def status(interaction: discord.Interaction):
 
 
 # ==============================
-# メッセージ監視・翻訳処理
+# メッセージ監視・翻訳
 # ==============================
 @bot.event
 async def on_message(message):
@@ -131,11 +136,11 @@ async def on_message(message):
         return
     guild_id = message.guild.id
 
-    # 自動翻訳ONでない場合
+    # 自動翻訳ONチェック
     if not auto_translate_guilds.get(guild_id, False):
         return
 
-    # チャンネル制限ありの場合
+    # チャンネル制限
     allowed_channels = channel_whitelist.get(guild_id, set())
     if allowed_channels and message.channel.id not in allowed_channels:
         return
@@ -145,15 +150,32 @@ async def on_message(message):
     if not text:
         return
 
+    translated_message_map[message.id] = []  # 元メッセージに紐づく翻訳を記録
+
     try:
         for lang in target_langs:
             translated = GoogleTranslator(source='auto', target=lang).translate(text)
-            # 翻訳結果が原文と同じ場合はスキップ（2重翻訳防止）
             if translated and translated != text:
                 flag = flags.get(lang, f"[{lang}]")
-                await message.channel.send(f"{flag} {translated}")
+                sent_msg = await message.channel.send(f"{flag} {translated}")
+                translated_message_map[message.id].append(sent_msg.id)
     except Exception as e:
         await message.channel.send(f"⚠️ 翻訳エラー: {e}")
+
+
+# ==============================
+# メッセージ削除 → 翻訳も削除
+# ==============================
+@bot.event
+async def on_message_delete(message):
+    if message.id in translated_message_map:
+        translated_ids = translated_message_map.pop(message.id)
+        for msg_id in translated_ids:
+            try:
+                msg = await message.channel.fetch_message(msg_id)
+                await msg.delete()
+            except:
+                pass  # 既に削除済みでもOK
 
 
 # ==============================

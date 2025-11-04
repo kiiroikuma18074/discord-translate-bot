@@ -6,7 +6,9 @@ from deep_translator import GoogleTranslator
 from flask import Flask
 from threading import Thread
 
-# --- Flask サーバー（Render維持用） ---
+# ==============================
+# Flaskサーバー（Render維持用）
+# ==============================
 app = Flask(__name__)
 
 @app.route('/')
@@ -22,15 +24,26 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# --- Discord Bot 設定 ---
+
+# ==============================
+# Discord Bot 設定
+# ==============================
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
+
+if not TOKEN:
+    print("❌ 環境変数 DISCORD_BOT_TOKEN が見つかりません！Render の Environment 設定を確認してください。")
+else:
+    print("✅ DISCORD_BOT_TOKEN を正常に読み込みました。")
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# --- データ保存用辞書 ---
+
+# ==============================
+# データ保存用辞書
+# ==============================
 auto_translate_guilds = {}
 user_languages = {}
 channel_whitelist = {}
@@ -42,7 +55,10 @@ flags = {
     "ru": "🇷🇺", "pt": "🇧🇷", "id": "🇮🇩", "vi": "🇻🇳", "th": "🇹🇭"
 }
 
-# --- /autoコマンド（翻訳ON/OFF） ---
+
+# ==============================
+# /autoコマンド（自動翻訳ON/OFF）
+# ==============================
 @tree.command(name="auto", description="自動翻訳をオン／オフします")
 @app_commands.describe(mode="on または off")
 async def auto(interaction: discord.Interaction, mode: str):
@@ -56,18 +72,23 @@ async def auto(interaction: discord.Interaction, mode: str):
     else:
         await interaction.response.send_message("⚠️ `on` または `off` を指定してください。")
 
-# --- /langコマンド（翻訳先言語の設定） ---
+
+# ==============================
+# /langコマンド（翻訳対象言語の設定）
+# ==============================
 @tree.command(name="lang", description="翻訳対象言語を設定します（例: en ja ko）")
 @app_commands.describe(languages="翻訳先の言語をスペース区切りで入力")
 async def lang(interaction: discord.Interaction, languages: str):
     guild_id = interaction.guild.id
     user_languages[guild_id] = languages.split()
 
-    # 国旗での確認メッセージ
     flags_display = " ".join(flags.get(lang, f"[{lang}]") for lang in user_languages[guild_id])
     await interaction.response.send_message(f"✅ 翻訳対象言語を {flags_display} に設定しました！")
 
-# --- /channelコマンド（翻訳対象チャンネルを選択） ---
+
+# ==============================
+# /channelコマンド（翻訳対象チャンネル設定）
+# ==============================
 @tree.command(name="channel", description="翻訳を有効にするチャンネルを設定します")
 @app_commands.describe(channel="翻訳を有効にしたいチャンネル")
 async def channel(interaction: discord.Interaction, channel: discord.TextChannel):
@@ -81,7 +102,10 @@ async def channel(interaction: discord.Interaction, channel: discord.TextChannel
         channel_whitelist[guild_id].add(channel.id)
         await interaction.response.send_message(f"✅ {channel.mention} で翻訳をオンにしました。")
 
-# --- /statusコマンド（現在の設定確認） ---
+
+# ==============================
+# /statusコマンド（設定確認）
+# ==============================
 @tree.command(name="status", description="現在の翻訳設定を確認します")
 async def status(interaction: discord.Interaction):
     guild_id = interaction.guild.id
@@ -97,7 +121,10 @@ async def status(interaction: discord.Interaction):
     embed.add_field(name="対象チャンネル", value=ch_list, inline=False)
     await interaction.response.send_message(embed=embed)
 
-# --- メッセージ監視・翻訳処理 ---
+
+# ==============================
+# メッセージ監視・翻訳処理
+# ==============================
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -114,24 +141,33 @@ async def on_message(message):
         return
 
     target_langs = user_languages.get(guild_id, ["en", "ja"])
-    text = message.content
+    text = message.content.strip()
+    if not text:
+        return
 
     try:
         for lang in target_langs:
             translated = GoogleTranslator(source='auto', target=lang).translate(text)
+            # 翻訳結果が原文と同じ場合はスキップ（2重翻訳防止）
             if translated and translated != text:
                 flag = flags.get(lang, f"[{lang}]")
                 await message.channel.send(f"{flag} {translated}")
     except Exception as e:
         await message.channel.send(f"⚠️ 翻訳エラー: {e}")
 
-# --- 起動イベント ---
+
+# ==============================
+# 起動イベント
+# ==============================
 @bot.event
 async def on_ready():
     await tree.sync()
     print(f"✅ Logged in as {bot.user}")
 
-# --- メイン実行 ---
+
+# ==============================
+# メイン実行
+# ==============================
 if __name__ == "__main__":
     keep_alive()
-    bot.run(DISCORD_BOT_TOKEN)
+    bot.run(TOKEN)

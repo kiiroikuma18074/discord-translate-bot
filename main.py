@@ -31,9 +31,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
 # --- データ保存用辞書 ---
-auto_translate_guilds = {}     # サーバーごとの自動翻訳設定（ON/OFF）
-user_languages = {}            # サーバーごとの翻訳言語設定
-channel_whitelist = {}         # サーバーごとの対象チャンネル設定
+auto_translate_guilds = {}
+user_languages = {}
+channel_whitelist = {}
 
 # --- 国旗絵文字マッピング ---
 flags = {
@@ -62,7 +62,10 @@ async def auto(interaction: discord.Interaction, mode: str):
 async def lang(interaction: discord.Interaction, languages: str):
     guild_id = interaction.guild.id
     user_languages[guild_id] = languages.split()
-    await interaction.response.send_message(f"✅ 翻訳対象言語を `{languages}` に設定しました！")
+
+    # 国旗での確認メッセージ
+    flags_display = " ".join(flags.get(lang, f"[{lang}]") for lang in user_languages[guild_id])
+    await interaction.response.send_message(f"✅ 翻訳対象言語を {flags_display} に設定しました！")
 
 # --- /channelコマンド（翻訳対象チャンネルを選択） ---
 @tree.command(name="channel", description="翻訳を有効にするチャンネルを設定します")
@@ -83,13 +86,14 @@ async def channel(interaction: discord.Interaction, channel: discord.TextChannel
 async def status(interaction: discord.Interaction):
     guild_id = interaction.guild.id
     auto_status = "オン ✅" if auto_translate_guilds.get(guild_id, False) else "オフ ❌"
-    langs = " ".join(user_languages.get(guild_id, ["en", "ja"]))
+    langs = user_languages.get(guild_id, ["en", "ja"])
+    flags_display = " ".join(flags.get(lang, f"[{lang}]") for lang in langs)
     channels = channel_whitelist.get(guild_id, set())
     ch_list = ", ".join(f"<#{ch_id}>" for ch_id in channels) if channels else "（未設定）"
 
     embed = discord.Embed(title="🌐 翻訳Bot ステータス", color=0x3498db)
     embed.add_field(name="自動翻訳", value=auto_status, inline=False)
-    embed.add_field(name="翻訳対象言語", value=langs, inline=False)
+    embed.add_field(name="翻訳対象言語", value=flags_display, inline=False)
     embed.add_field(name="対象チャンネル", value=ch_list, inline=False)
     await interaction.response.send_message(embed=embed)
 

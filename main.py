@@ -7,7 +7,7 @@ from deep_translator import GoogleTranslator
 from flask import Flask
 from threading import Thread
 
-# --- Flask サーバー（Render維持用） ---
+# --- Flaskサーバー (Render維持用) ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -38,30 +38,38 @@ def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    return {"auto_translate_guilds": {}, "user_languages": {}}
+    return {"auto_translate_channels": {}, "user_languages": {}}
 
 def save_data():
     with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump({"auto_translate_guilds": auto_translate_guilds,
-                   "user_languages": user_languages}, f, ensure_ascii=False, indent=2)
+        json.dump(
+            {
+                "auto_translate_channels": auto_translate_channels,
+                "user_languages": user_languages
+            },
+            f, ensure_ascii=False, indent=2
+        )
 
 data = load_data()
-auto_translate_guilds = data["auto_translate_guilds"]
+auto_translate_channels = data["auto_translate_channels"]
 user_languages = data["user_languages"]
 
-# --- コマンド ---
-@tree.command(name="auto", description="自動翻訳をオン／オフします")
+# --- コマンド群 ---
+
+@tree.command(name="auto", description="このチャンネルで自動翻訳をオン／オフします")
 @app_commands.describe(mode="on または off")
 async def auto(interaction: discord.Interaction, mode: str):
     guild_id = str(interaction.guild.id)
+    channel_id = str(interaction.channel.id)
+
     if mode.lower() == "on":
-        auto_translate_guilds[guild_id] = True
+        auto_translate_channels.setdefault(guild_id, {})[channel_id] = True
         save_data()
-        await interaction.response.send_message("🌍 自動翻訳を **オン** にしました！")
+        await interaction.response.send_message("🌍 このチャンネルで自動翻訳を **オン** にしました！")
     elif mode.lower() == "off":
-        auto_translate_guilds[guild_id] = False
+        auto_translate_channels.setdefault(guild_id, {})[channel_id] = False
         save_data()
-        await interaction.response.send_message("🚫 自動翻訳を **オフ** にしました！")
+        await interaction.response.send_message("🚫 このチャンネルで自動翻訳を **オフ** にしました！")
     else:
         await interaction.response.send_message("⚠️ `on` または `off` を指定してください。")
 
@@ -73,15 +81,39 @@ async def lang(interaction: discord.Interaction, languages: str):
     save_data()
     await interaction.response.send_message(f"✅ 翻訳対象言語を `{languages}` に設定しました！")
 
+@tree.command(name="status", description="このサーバーの翻訳設定を確認します")
+async def status(interaction: discord.Interaction):
+    guild_id = str(interaction.guild.id)
+    channel_id = str(interaction.channel.id)
+
+    lang_list = user_languages.get(guild_id, ["en", "ja"])
+    channel_status = auto_translate_channels.get(guild_id, {}).get(channel_id, False)
+
+    msg = (
+        f"🧠 **翻訳設定ステータス**\n"
+        f"📍 サーバー: {interaction.guild.name}\n"
+        f"💬 チャンネル: {interaction.channel.name}\n"
+        f"🌐 翻訳対象言語: {' '.join(lang_list)}\n"
+        f"🔁 このチャンネルの自動翻訳: {'✅ ON' if channel_status else '❌ OFF'}"
+    )
+    await interaction.response.send_message(msg)
+
+# --- メッセージ監視（自動翻訳） ---
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
+
     guild_id = str(message.guild.id)
-    if not auto_translate_guilds.get(guild_id, False):
+    channel_id = str(message.channel.id)
+
+    # チャンネル設定がOFFならスキップ
+    if not auto_translate_channels.get(guild_id, {}).get(channel_id, False):
         return
+
     target_langs = user_languages.get(guild_id, ["en", "ja"])
     text = message.content
+
     try:
         for lang in target_langs:
             translated = GoogleTranslator(source='auto', target=lang).translate(text)
@@ -90,11 +122,13 @@ async def on_message(message):
     except Exception as e:
         await message.channel.send(f"⚠️ 翻訳エラー: {e}")
 
+# --- 起動時 ---
 @bot.event
 async def on_ready():
     await tree.sync()
     print(f"✅ Logged in as {bot.user}")
-    print(f"🧠 現在登録済みサーバー: {list(auto_translate_guilds.keys())}")
+    print(f"🌍 登録済みサーバー数: {len(bot.guilds)}")
+    print(f"💾 現在の設定: {json.dumps(auto_translate_channels, indent=2, ensure_ascii=False)}")
 
 if __name__ == "__main__":
     keep_alive()

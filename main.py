@@ -134,4 +134,4 @@ async def on_ready():
 # --- メイン実行 ---
 if __name__ == "__main__":
     keep_alive()
-    bot.run(TOKEN)
+    bot.run(DISCORD_BOT_TOKEN)
